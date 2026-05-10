@@ -1,0 +1,1173 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>屋顶构造 — 交互式教学 Demo</title>
+<style>
+  :root {
+    --bg: #f8f7f3;
+    --sidebar-bg: #f0ede6;
+    --viewport-bg: #e8e5df;
+    --text: #2c2416;
+    --text-secondary: #6b6355;
+    --accent: #c0392b;
+    --accent-light: #e74c3c;
+    --border: #d5d0c7;
+    --shadow: 0 2px 12px rgba(0,0,0,0.08);
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  header {
+    padding: 14px 28px;
+    border-bottom: 1px solid var(--border);
+    background: #fff;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    z-index: 10;
+    flex-shrink: 0;
+  }
+  header h1 { font-size: 1.35rem; font-weight: 700; letter-spacing: 0.02em; color: var(--text); }
+  header .badge {
+    font-size: 0.72rem; background: var(--accent); color: #fff;
+    padding: 3px 10px; border-radius: 10px; font-weight: 600; letter-spacing: 0.04em;
+  }
+  header .model-indicator {
+    font-size: 0.75rem; color: var(--text-secondary); margin-left: auto;
+    display: flex; align-items: center; gap: 8px;
+  }
+  header .model-indicator .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  header .model-indicator .dot.demo { background: #3498db; }
+  header .model-indicator .dot.custom { background: #27ae60; }
+
+  main { flex: 1; display: flex; min-height: 0; }
+
+  /* ── 3D Viewport ── */
+  .viewport {
+    flex: 1; position: relative; background: var(--viewport-bg);
+    cursor: grab; min-width: 0;
+  }
+  .viewport:active { cursor: grabbing; }
+  .viewport canvas { display: block; }
+  .viewport.dragover { background: #dde4d0; }
+
+  .viewport-tools {
+    position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 10px; z-index: 5; flex-wrap: wrap; justify-content: center;
+  }
+  .vp-btn {
+    padding: 10px 20px; border: 1px solid var(--border); border-radius: 22px;
+    background: #fff; font-size: 0.85rem; cursor: pointer; color: var(--text);
+    font-family: inherit; transition: all 0.2s; white-space: nowrap;
+    box-shadow: var(--shadow);
+  }
+  .vp-btn:hover { background: #f5f3ee; border-color: #bbb; }
+  .vp-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .vp-btn.accent2 { border-color: #27ae60; color: #27ae60; }
+  .vp-btn.accent2:hover { background: #eafaf1; }
+  .vp-btn.accent2.active { background: #27ae60; color: #fff; border-color: #27ae60; }
+
+  .hint-overlay {
+    position: absolute; bottom: 90px; left: 50%; transform: translateX(-50%);
+    font-size: 0.8rem; color: var(--text-secondary); pointer-events: none;
+    opacity: 0.85; transition: opacity 0.4s; text-align: center;
+  }
+
+  /* Drop overlay */
+  .drop-overlay {
+    position: absolute; inset: 0; z-index: 20; pointer-events: none;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(39,174,96,0.08); border: 3px dashed #27ae60;
+    opacity: 0; transition: opacity 0.2s;
+  }
+  .drop-overlay.active { opacity: 1; }
+  .drop-overlay .drop-hint {
+    background: #fff; padding: 24px 40px; border-radius: 16px;
+    text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+  }
+  .drop-overlay .drop-hint .icon { font-size: 2.5rem; margin-bottom: 8px; }
+  .drop-overlay .drop-hint p { font-size: 0.95rem; color: var(--text); }
+  .drop-overlay .drop-hint .sub { font-size: 0.75rem; color: var(--text-secondary); margin-top: 4px; }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width: 340px; background: var(--sidebar-bg); border-left: 1px solid var(--border);
+    display: flex; flex-direction: column; flex-shrink: 0; overflow-y: auto;
+    box-shadow: -2px 0 12px rgba(0,0,0,0.04);
+  }
+  .sidebar-section { padding: 20px 22px; border-bottom: 1px solid var(--border); }
+  .sidebar-section:last-child { border-bottom: none; }
+  .sidebar h3 { font-size: 1rem; font-weight: 700; margin-bottom: 4px; color: var(--text); }
+  .sidebar .subtitle { font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 16px; }
+
+  /* Legend */
+  .legend-item {
+    display: flex; align-items: center; gap: 12px; padding: 10px 12px;
+    border-radius: 8px; cursor: pointer; transition: all 0.18s;
+    border: 1.5px solid transparent; margin-bottom: 2px;
+  }
+  .legend-item:hover { background: rgba(0,0,0,0.03); }
+  .legend-item.selected { background: #fff; border-color: var(--accent); box-shadow: 0 1px 6px rgba(0,0,0,0.06); }
+  .legend-item.unmatched { opacity: 0.4; }
+  .legend-swatch {
+    width: 28px; height: 28px; border-radius: 6px; flex-shrink: 0;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.15), 0 1px 2px rgba(0,0,0,0.1);
+  }
+  .legend-info { flex:1; min-width:0; }
+  .legend-name { font-size: 0.88rem; font-weight: 600; }
+  .legend-eng { font-size: 0.7rem; color: var(--text-secondary); }
+  .legend-num {
+    font-size: 0.7rem; color: var(--text-secondary); background: #e8e5df;
+    width: 20px; height: 20px; border-radius: 50%; display: flex;
+    align-items: center; justify-content: center; flex-shrink: 0;
+  }
+
+  /* Detail panel */
+  .detail-panel { flex: 1; min-height: 120px; }
+  .detail-empty {
+    text-align: center; padding: 40px 20px; color: var(--text-secondary);
+    font-size: 0.85rem; line-height: 1.7;
+  }
+  .detail-empty .icon { font-size: 2.2rem; margin-bottom: 10px; opacity: 0.6; }
+  .detail-content h3 { font-size: 1.15rem; margin-bottom: 2px; }
+  .detail-content .eng-name { font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 14px; }
+  .detail-content .desc { font-size: 0.88rem; line-height: 1.7; color: var(--text); }
+  .detail-content .meta {
+    margin-top: 14px; font-size: 0.75rem; color: var(--text-secondary);
+    display: flex; gap: 16px; flex-wrap: wrap;
+  }
+  .detail-content .meta span { background: #fff; padding: 4px 10px; border-radius: 12px; }
+
+  /* ── Mapping Modal ── */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 50;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none; transition: opacity 0.25s;
+  }
+  .modal-overlay.open { opacity: 1; pointer-events: auto; }
+  .modal {
+    background: #fff; border-radius: 16px; padding: 28px 32px;
+    max-width: 560px; width: 90%; max-height: 80vh; overflow-y: auto;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.18);
+  }
+  .modal h3 { font-size: 1.15rem; margin-bottom: 4px; }
+  .modal .modal-sub { font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 20px; }
+  .modal table { width: 100%; border-collapse: collapse; }
+  .modal th, .modal td {
+    padding: 8px 10px; text-align: left; font-size: 0.82rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .modal th { font-weight: 600; color: var(--text-secondary); font-size: 0.72rem; text-transform: uppercase; }
+  .modal select {
+    padding: 5px 8px; border-radius: 6px; border: 1px solid var(--border);
+    font-family: inherit; font-size: 0.8rem; background: #fff;
+  }
+  .modal .mesh-count { font-size: 0.7rem; color: var(--text-secondary); }
+  .modal .btn-row { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+  .modal .btn {
+    padding: 9px 22px; border-radius: 20px; border: 1px solid var(--border);
+    background: #fff; font-family: inherit; font-size: 0.85rem; cursor: pointer;
+    transition: all 0.2s;
+  }
+  .modal .btn:hover { background: #f5f3ee; }
+  .modal .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .modal .btn.primary:hover { background: #a93226; }
+
+  /* Loading */
+  .loading {
+    position: fixed; inset: 0; background: var(--bg); display: flex;
+    align-items: center; justify-content: center; z-index: 100;
+    transition: opacity 0.4s; font-size: 1rem; color: var(--text-secondary);
+  }
+  .loading.hidden { opacity: 0; pointer-events: none; }
+
+  @media (max-width: 900px) {
+    main { flex-direction: column; }
+    .sidebar { width: 100%; max-height: 40vh; border-left: none; border-top: 1px solid var(--border); }
+    .viewport { height: 60vh; }
+  }
+</style>
+</head>
+<body>
+
+<div class="loading" id="loading">加载中...</div>
+
+<header>
+  <h1>屋顶构造</h1>
+  <span class="badge">交互式教学</span>
+  <span class="model-indicator" id="modelIndicator">
+    <span class="dot demo"></span> Demo 模型
+  </span>
+</header>
+
+<main>
+  <div class="viewport" id="viewport">
+    <div class="hint-overlay" id="hint">🖱 拖拽旋转 &nbsp;|&nbsp; 滚轮缩放 &nbsp;|&nbsp; 💥 点击「爆炸图」展开层次</div>
+    <div class="drop-overlay" id="dropOverlay">
+      <div class="drop-hint">
+        <div class="icon">📂</div>
+        <p>释放以加载 GLB / GLTF 模型</p>
+        <p class="sub">模型中的部件将按名称自动匹配到构造层</p>
+      </div>
+    </div>
+    <div class="viewport-tools">
+      <button class="vp-btn" id="btnExplode" title="展开/合拢屋顶各构造层">💥 爆炸图</button>
+      <button class="vp-btn" id="btnAutoRotate" title="自动旋转模型">🔄 自动旋转</button>
+      <button class="vp-btn" id="btnReset" title="回到默认视角">🏠 重置视角</button>
+      <button class="vp-btn accent2" id="btnLoadModel" title="加载自定义 GLB/GLTF 模型">📁 加载模型</button>
+      <button class="vp-btn accent2" id="btnRestoreDemo" title="还原到 Demo 模型" style="display:none;">🔄 还原Demo</button>
+    </div>
+  </div>
+
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-section">
+      <h3>📐 屋顶构造层次</h3>
+      <p class="subtitle" id="legendSubtitle">由上至下 · 共 8 层构造</p>
+      <div id="legend"></div>
+    </div>
+    <div class="sidebar-section detail-panel" id="detailPanel">
+      <div class="detail-empty">
+        <div class="icon">👆</div>
+        <p>点击模型上的层次<br>或左侧图例查看详细信息</p>
+        <p style="margin-top:8px;font-size:0.78rem;">💥 点击「爆炸图」展开屋顶层次</p>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<!-- Mapping Modal -->
+<div class="modal-overlay" id="mappingModal">
+  <div class="modal">
+    <h3>🔗 网格 → 构造层 映射</h3>
+    <p class="modal-sub">已自动按名称匹配。您可手动调整每个网格所属的构造层。</p>
+    <div id="mappingTable"></div>
+    <p style="font-size:0.72rem;color:var(--text-secondary);margin-top:12px;" id="unassignedNote"></p>
+    <div class="btn-row">
+      <button class="btn" id="btnMappingCancel">取消</button>
+      <button class="btn primary" id="btnMappingApply">应用映射</button>
+    </div>
+  </div>
+</div>
+
+<!-- Hidden file input -->
+<input type="file" id="fileInput" accept=".glb,.gltf" style="display:none;">
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+// ═══════════════════════════════════════════
+// CONFIGURATION
+// ═══════════════════════════════════════════
+const PITCH_DEG = 25;
+const PITCH = PITCH_DEG * Math.PI / 180;
+const HALF_WIDTH = 4;
+const ROOF_DEPTH = 6;
+const WALL_HEIGHT = 3;
+const RIDGE_HEIGHT = WALL_HEIGHT + HALF_WIDTH * Math.tan(PITCH);
+const BUILDING_W = HALF_WIDTH * 2;
+const BUILDING_D = ROOF_DEPTH;
+const WALL_THICK = 0.25;
+const EXPLODE_GAP = 0.55;
+
+// Layer definitions (bottom → top)
+const layerDefs = [
+  { name: '结构层',   eng: 'Structural Deck',           color: '#95a5a6', thick: 0.25, roughness: 0.55,
+    desc: '钢筋混凝土现浇屋面板，承受屋顶全部荷载（自重、雪荷载、风荷载、施工荷载等），并将荷载传递至下部承重墙或柱。通常厚度为 100–150mm。' },
+  { name: '隔汽层',   eng: 'Vapor Barrier',             color: '#27ae60', thick: 0.06, roughness: 0.35,
+    desc: '防止室内水蒸气渗透进入保温层，避免保温材料受潮后热工性能下降和内部结露。常用材料为沥青基隔汽卷材或铝箔复合膜。' },
+  { name: '保温层',   eng: 'Thermal Insulation',         color: '#f39c12', thick: 0.16, roughness: 0.65,
+    desc: '减少室内热量通过屋顶散失，提高建筑能效和热舒适性。常用材料有挤塑聚苯板(XPS)、岩棉板、聚氨酯硬泡等，厚度由热工计算确定。' },
+  { name: '找坡层',   eng: 'Slope-Forming Layer',        color: '#e8d5b7', thick: 0.18, roughness: 0.6,
+    desc: '在平屋顶或缓坡屋顶上形成排水坡度（通常 2%–5%），引导雨水流向排水口或檐沟。常用轻集料混凝土或加气混凝土碎料铺设。' },
+  { name: '找平层',   eng: 'Leveling Course',            color: '#d5c4a1', thick: 0.08, roughness: 0.5,
+    desc: '为防水层提供平整、坚实的基层表面。常用 1:3 水泥砂浆抹平，厚度 15–20mm，表面需压光处理，阴阳角处做圆弧倒角。' },
+  { name: '防水层',   eng: 'Waterproofing Membrane',     color: '#2c3e50', thick: 0.06, roughness: 0.3,
+    desc: '屋顶防水的核心构造层，阻止雨水和雪水渗入建筑内部。常用 SBS/APP 改性沥青防水卷材、高分子卷材(TPO/PVC)或聚氨酯防水涂料。' },
+  { name: '保护层',   eng: 'Protective Layer',           color: '#bdc3c7', thick: 0.08, roughness: 0.5,
+    desc: '保护防水层免受紫外线照射、温度变化和机械损伤。常用材料为水泥砂浆、细石混凝土或预制混凝土板，上人屋面需增加铺地砖。' },
+  { name: '屋面瓦',   eng: 'Roof Tiles',                 color: '#c0392b', thick: 0.12, roughness: 0.7,
+    desc: '屋顶最外层饰面，兼具防水、保温和装饰功能。常用材料有粘土瓦、水泥瓦、金属瓦、石板瓦等。通过挂瓦条和顺水条固定在屋面基层上。' },
+];
+
+// Keywords for auto-matching mesh names → layer index (case-insensitive)
+const MATCH_PATTERNS = [
+  { idx: 0, kw: ['结构层','structural','structure deck','concrete','deck','slab','结构','struct'] },
+  { idx: 1, kw: ['隔汽层','vapor barrier','vapour barrier','隔汽','vapor','vapour','隔气','avb'] },
+  { idx: 2, kw: ['保温层','insulation','thermal','保温','xps','eps','岩棉','rockwool','pir','pur','foam'] },
+  { idx: 3, kw: ['找坡层','slope','slope-forming','找坡','screed','sloping'] },
+  { idx: 4, kw: ['找平层','leveling','smoothing','找平','mortar','cement','smooth','render'] },
+  { idx: 5, kw: ['防水层','waterproofing','waterproof','membrane','防水','sbs','app','tpo','pvc','bitumen','沥青'] },
+  { idx: 6, kw: ['保护层','protective','protection','保护','cover','covering','board'] },
+  { idx: 7, kw: ['屋面瓦','roof tile','tile','瓦','shingle','slate','clay','metal roof','屋面'] },
+];
+
+// ═══════════════════════════════════════════
+// SCENE SETUP
+// ═══════════════════════════════════════════
+const viewport = document.getElementById('viewport');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#e8e5df');
+scene.fog = new THREE.Fog('#e8e5df', 15, 40);
+
+const camera = new THREE.PerspectiveCamera(48, 2, 0.5, 60);
+camera.position.set(9, 5.5, 9);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+viewport.appendChild(renderer.domElement);
+
+// Lights
+const ambient = new THREE.AmbientLight('#faf5eb', 3.5);
+scene.add(ambient);
+const sun = new THREE.DirectionalLight('#ffffff', 5.5);
+sun.position.set(10, 14, 6);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024);
+sun.shadow.camera.near = 0.5; sun.shadow.camera.far = 50;
+sun.shadow.camera.left = -15; sun.shadow.camera.right = 15;
+sun.shadow.camera.top = 15; sun.shadow.camera.bottom = -5;
+sun.shadow.bias = -0.0003; sun.shadow.normalBias = 0.02;
+scene.add(sun);
+const fill = new THREE.DirectionalLight('#d5e0f0', 1.8);
+fill.position.set(-3, 2, -2);
+scene.add(fill);
+
+// Controls
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 2.8, 0);
+controls.enableDamping = true;
+controls.dampingFactor = 0.12;
+controls.minDistance = 5; controls.maxDistance = 18;
+controls.maxPolarAngle = Math.PI * 0.78; controls.minPolarAngle = 0.25;
+controls.autoRotateSpeed = 1.2;
+controls.update();
+
+// ═══════════════════════════════════════════
+// GROUND
+// ═══════════════════════════════════════════
+const groundGeo = new THREE.PlaneGeometry(40, 40);
+const groundMat = new THREE.MeshStandardMaterial({ color: '#e0dcd4', roughness: 0.9 });
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true;
+scene.add(ground);
+const grid = new THREE.GridHelper(22, 22, '#c8c3b8', '#d8d4ca');
+grid.position.y = 0.005;
+scene.add(grid);
+
+// ═══════════════════════════════════════════
+// BUILDING WALLS (demo only)
+// ═══════════════════════════════════════════
+const buildingGroup = new THREE.Group();
+buildingGroup.name = 'building';
+scene.add(buildingGroup);
+
+const wallMat = new THREE.MeshStandardMaterial({ color: '#f5efe4', roughness: 0.7 });
+function makeWall(w, h, d, x, y, z) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
+  m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true;
+  buildingGroup.add(m); return m;
+}
+const hw = BUILDING_W / 2, hd = BUILDING_D / 2;
+makeWall(BUILDING_W, WALL_HEIGHT, WALL_THICK, 0, WALL_HEIGHT/2, hd);
+makeWall(BUILDING_W, WALL_HEIGHT, WALL_THICK, 0, WALL_HEIGHT/2, -hd);
+makeWall(WALL_THICK, WALL_HEIGHT, BUILDING_D, hw, WALL_HEIGHT/2, 0);
+makeWall(WALL_THICK, WALL_HEIGHT, BUILDING_D, -hw, WALL_HEIGHT/2, 0);
+function createGable(z) {
+  const shape = new THREE.Shape();
+  const gh = RIDGE_HEIGHT - WALL_HEIGHT;
+  shape.moveTo(-hw, 0); shape.lineTo(0, gh); shape.lineTo(hw, 0); shape.closePath();
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: WALL_THICK, bevelEnabled: false });
+  const mesh = new THREE.Mesh(geo, wallMat);
+  mesh.position.set(0, WALL_HEIGHT, z - WALL_THICK/2);
+  mesh.castShadow = true; mesh.receiveShadow = true;
+  buildingGroup.add(mesh);
+}
+createGable(hd); createGable(-hd);
+
+// ═══════════════════════════════════════════
+// DEMO ROOF LAYERS (procedural)
+// ═══════════════════════════════════════════
+const demoGroup = new THREE.Group();
+demoGroup.name = 'demoRoof';
+scene.add(demoGroup);
+
+const layers = [];       // { def, leftMesh, rightMesh, leftMat, rightMat, baseOffset }
+const allMeshes = [];    // flat array for raycasting (rebuild on model switch)
+const slopedLen = HALF_WIDTH / Math.cos(PITCH);
+const baseCtrY = (RIDGE_HEIGHT + WALL_HEIGHT) / 2;
+const baseCtrLX = -HALF_WIDTH / 2;
+const baseCtrRX = HALF_WIDTH / 2;
+const normalL = new THREE.Vector3(-Math.sin(PITCH), Math.cos(PITCH), 0);
+const normalR = new THREE.Vector3(Math.sin(PITCH), Math.cos(PITCH), 0);
+
+let cumThick = 0;
+layerDefs.forEach((def, i) => {
+  const baseOff = cumThick + def.thick / 2;
+  cumThick += def.thick;
+  const geoBox = new THREE.BoxGeometry(slopedLen, def.thick, ROOF_DEPTH);
+
+  const mat = new THREE.MeshStandardMaterial({ color: def.color, roughness: def.roughness, metalness: 0.02 });
+  const leftMesh = new THREE.Mesh(geoBox, mat);
+  leftMesh.rotation.z = PITCH;
+  leftMesh.castShadow = true; leftMesh.receiveShadow = true;
+  leftMesh.userData = { layerIndex: i, side: 'left' };
+  demoGroup.add(leftMesh);
+
+  const matR = new THREE.MeshStandardMaterial({ color: def.color, roughness: def.roughness, metalness: 0.02 });
+  const rightMesh = new THREE.Mesh(geoBox.clone(), matR);
+  rightMesh.rotation.z = -PITCH;
+  rightMesh.castShadow = true; rightMesh.receiveShadow = true;
+  rightMesh.userData = { layerIndex: i, side: 'right' };
+  demoGroup.add(rightMesh);
+
+  layers.push({ def, leftMesh, rightMesh, leftMat: mat, rightMat: matR, baseOffset: baseOff });
+  allMeshes.push(leftMesh, rightMesh);
+});
+
+// ═══════════════════════════════════════════
+// CUSTOM MODEL STATE
+// ═══════════════════════════════════════════
+const gltfLoader = new GLTFLoader();
+const customGroup = new THREE.Group();
+customGroup.name = 'customModel';
+customGroup.visible = false;
+scene.add(customGroup);
+
+let customLayers = null;        // array of { layerIndex, meshes: [], originalPositions: Map, centroid: Vector3 }
+let customMeshIndex = null;     // Map: mesh → layerIndex
+let allCustomMeshes = [];       // flat for raycaster
+let usingCustomModel = false;
+let customModelScale = 1;
+let customModelCenter = new THREE.Vector3();
+let customModelSize = 1;
+
+// Mesh→layer mapping (editable in modal)
+let meshAssignments = {};       // meshName → layerIndex (or -1 for unassigned)
+let allMeshNames = [];          // all mesh names found in loaded model
+
+// ═══════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════
+let explodeFactor = 0;
+let targetExplode = 0;
+let selectedIdx = -1;
+let hoveredIdx = -1;
+let autoRotate = false;
+const defaultCamPos = new THREE.Vector3(9, 5.5, 9);
+const defaultTarget = new THREE.Vector3(0, 2.8, 0);
+let resetting = false;
+let resetT = 0;
+const resetFromPos = new THREE.Vector3();
+const resetFromTarget = new THREE.Vector3();
+
+// ═══════════════════════════════════════════
+// LAYER POSITIONING
+// ═══════════════════════════════════════════
+function updateDemoLayerPositions() {
+  layers.forEach((layer, i) => {
+    const normalOff = layer.baseOffset + i * EXPLODE_GAP * explodeFactor;
+    layer.leftMesh.position.set(
+      baseCtrLX + normalOff * normalL.x,
+      baseCtrY + normalOff * normalL.y, 0
+    );
+    layer.rightMesh.position.set(
+      baseCtrRX + normalOff * normalR.x,
+      baseCtrY + normalOff * normalR.y, 0
+    );
+  });
+}
+
+function updateCustomLayerPositions() {
+  if (!customLayers) return;
+  customLayers.forEach(cl => {
+    if (cl.meshes.length === 0) return;
+    const dir = cl.centroid.clone().sub(customModelCenter).normalize();
+    // fallback: if centroid == center, explode vertically
+    if (dir.length() < 0.001) dir.set(0, 1, 0);
+    const offset = dir.multiplyScalar(cl.layerIndex * EXPLODE_GAP * 1.2 * explodeFactor);
+    cl.meshes.forEach(mesh => {
+      const orig = cl.originalPositions.get(mesh);
+      if (orig) mesh.position.copy(orig).add(offset);
+    });
+  });
+}
+
+function updateAllPositions() {
+  if (usingCustomModel) {
+    updateCustomLayerPositions();
+  } else {
+    updateDemoLayerPositions();
+  }
+}
+
+// ═══════════════════════════════════════════
+// EMISSIVE MANAGEMENT
+// ═══════════════════════════════════════════
+function getLayerMaterials(idx) {
+  if (usingCustomModel && customLayers && customLayers[idx]) {
+    return customLayers[idx].meshes.map(m => Array.isArray(m.material) ? m.material[0] : m.material);
+  }
+  if (!usingCustomModel && layers[idx]) {
+    return [layers[idx].leftMat, layers[idx].rightMat];
+  }
+  return [];
+}
+
+function resetEmissives() {
+  const allLayerData = usingCustomModel ? customLayers : layers;
+  if (!allLayerData) return;
+
+  if (usingCustomModel) {
+    customLayers.forEach((cl, i) => {
+      const isSel = i === selectedIdx;
+      const isHov = i === hoveredIdx && !isSel;
+      const eVal = isSel ? 0.45 : isHov ? 0.22 : 0;
+      cl.meshes.forEach(mesh => {
+        const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+        if (mat && mat.emissive) {
+          mat.emissive.set(isSel ? '#b55a10' : '#000000');
+          mat.emissiveIntensity = eVal;
+        }
+      });
+    });
+  } else {
+    layers.forEach((layer, i) => {
+      const isSel = i === selectedIdx;
+      const isHov = i === hoveredIdx && !isSel;
+      const e = isSel ? 0.45 : isHov ? 0.22 : 0;
+      layer.leftMat.emissive.set(isSel ? '#b55a10' : '#000000');
+      layer.leftMat.emissiveIntensity = e;
+      layer.rightMat.emissive.set(isSel ? '#b55a10' : '#000000');
+      layer.rightMat.emissiveIntensity = e;
+    });
+  }
+}
+
+// ═══════════════════════════════════════════
+// RAYCASTER
+// ═══════════════════════════════════════════
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+function getIntersections(e) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const targets = usingCustomModel ? allCustomMeshes : allMeshes;
+  return raycaster.intersectObjects(targets, false);
+}
+
+function getLayerFromIntersect(intersects) {
+  if (intersects.length === 0) return -1;
+  const obj = intersects[0].object;
+  if (usingCustomModel && customMeshIndex) {
+    return customMeshIndex.get(obj) ?? -1;
+  }
+  return obj.userData.layerIndex ?? -1;
+}
+
+// ═══════════════════════════════════════════
+// SIDEBAR UI
+// ═══════════════════════════════════════════
+const legendEl = document.getElementById('legend');
+const detailPanel = document.getElementById('detailPanel');
+
+function buildLegend() {
+  const items = [...layerDefs].reverse();
+  legendEl.innerHTML = items.map((def, ri) => {
+    const i = layerDefs.length - 1 - ri;
+    const unmatchedClass = usingCustomModel && customLayers && customLayers[i] && customLayers[i].meshes.length === 0 ? ' unmatched' : '';
+    return `<div class="legend-item${unmatchedClass}" data-idx="${i}">
+        <span class="legend-swatch" style="background:${def.color}"></span>
+        <span class="legend-info">
+          <span class="legend-name">${def.name}</span>
+          <span class="legend-eng">${def.eng}</span>
+        </span>
+        <span class="legend-num">${ri + 1}</span>
+      </div>`;
+  }).join('');
+
+  legendEl.querySelectorAll('.legend-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const idx = parseInt(el.dataset.idx);
+      selectLayer(selectedIdx === idx ? -1 : idx);
+    });
+  });
+}
+
+function selectLayer(idx) {
+  selectedIdx = idx;
+  resetEmissives();
+  updateLegendHighlight();
+  updateDetailPanel();
+  if (idx >= 0 && explodeFactor < 0.3) {
+    targetExplode = 0.55;
+    document.getElementById('btnExplode').classList.add('active');
+  }
+}
+
+function updateLegendHighlight() {
+  legendEl.querySelectorAll('.legend-item').forEach(el => {
+    el.classList.toggle('selected', parseInt(el.dataset.idx) === selectedIdx);
+  });
+}
+
+function updateDetailPanel() {
+  if (selectedIdx < 0) {
+    detailPanel.innerHTML = `
+      <div class="detail-empty">
+        <div class="icon">👆</div>
+        <p>点击模型上的层次<br>或左侧图例查看详细信息</p>
+        <p style="margin-top:8px;font-size:0.78rem;">💥 点击「爆炸图」展开屋顶层次</p>
+      </div>`;
+    return;
+  }
+  const def = layerDefs[selectedIdx];
+  const meshCount = usingCustomModel && customLayers && customLayers[selectedIdx]
+    ? customLayers[selectedIdx].meshes.length : '-';
+  detailPanel.innerHTML = `
+    <div class="detail-content">
+      <h3>${def.name}</h3>
+      <p class="eng-name">${def.eng}</p>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+        <span class="legend-swatch" style="background:${def.color};width:36px;height:36px;"></span>
+        <span style="font-size:0.78rem;color:var(--text-secondary);">第 ${layerDefs.length - selectedIdx} 层（从上往下）</span>
+      </div>
+      <p class="desc">${def.desc}</p>
+      <div class="meta">
+        <span>📏 厚度 ≈ ${(def.thick * 100).toFixed(0)}mm（示意）</span>
+        <span>🔢 编号 #${selectedIdx + 1}</span>
+        ${usingCustomModel ? `<span>🧩 网格数: ${meshCount}</span>` : ''}
+      </div>
+    </div>`;
+}
+
+buildLegend();
+updateDemoLayerPositions();
+resetEmissives();
+
+// ═══════════════════════════════════════════
+// CUSTOM MODEL LOADING
+// ═══════════════════════════════════════════
+
+/** Match a mesh name against patterns, return layer index or -1 */
+function autoMatchMeshName(meshName) {
+  const lower = meshName.toLowerCase();
+  for (const pat of MATCH_PATTERNS) {
+    for (const kw of pat.kw) {
+      if (lower.includes(kw.toLowerCase())) return pat.idx;
+    }
+  }
+  return -1;
+}
+
+/** Collect all mesh names from a GLTF scene recursively */
+function collectMeshes(root) {
+  const names = [];
+  root.traverse(child => {
+    if (child.isMesh && child.name) names.push(child.name);
+  });
+  return names;
+}
+
+/** Collect all meshes with their names */
+function collectMeshObjects(root) {
+  const result = [];
+  root.traverse(child => {
+    if (child.isMesh) result.push(child);
+  });
+  return result;
+}
+
+/** Process a loaded GLTF scene into custom layers */
+function processCustomModel(scene) {
+  // Collect meshes
+  const allObjs = collectMeshObjects(scene);
+  allMeshNames = allObjs.map(m => m.name || '(未命名)');
+
+  // Auto-match
+  meshAssignments = {};
+  allObjs.forEach(m => {
+    const name = m.name || '(未命名)';
+    meshAssignments[name] = autoMatchMeshName(name);
+  });
+
+  // Show mapping modal
+  showMappingModal(allObjs);
+}
+
+function buildCustomLayers(scene) {
+  // Clear previous
+  while (customGroup.children.length > 0) {
+    customGroup.remove(customGroup.children[0]);
+  }
+
+  const allObjs = collectMeshObjects(scene);
+
+  // Compute model bounds for scaling & centering
+  const box = new THREE.Box3();
+  allObjs.forEach(m => box.expandByObject(m));
+  const size = new THREE.Vector3();
+  box.getSize(size);
+  const center = new THREE.Vector3();
+  box.getCenter(center);
+
+  // Scale to fit scene (target max dimension ~10)
+  const maxDim = Math.max(size.x, size.y, size.z);
+  const scale = maxDim > 0 ? 9 / maxDim : 1;
+  customModelScale = scale;
+  customModelCenter.copy(center).multiplyScalar(scale);
+  customModelSize = maxDim * scale;
+
+  // Group meshes by layer
+  customLayers = layerDefs.map((def, i) => ({
+    layerIndex: i,
+    meshes: [],
+    originalPositions: new Map(),
+    centroid: new THREE.Vector3(),
+  }));
+
+  const unassignedGroup = new THREE.Group();
+  unassignedGroup.name = 'unassigned';
+
+  allObjs.forEach(m => {
+    const name = m.name || '(未命名)';
+    const assignIdx = meshAssignments[name] ?? -1;
+
+    // Clone the mesh (keep original in the loaded scene)
+    const cloned = m.clone();
+    cloned.userData.layerIndex = assignIdx;
+    cloned.userData.meshName = name;
+
+    if (assignIdx >= 0 && assignIdx < layerDefs.length) {
+      customLayers[assignIdx].meshes.push(cloned);
+      // Apply layer color tint
+      if (Array.isArray(cloned.material)) {
+        cloned.material = cloned.material.map(m => m.clone());
+      } else if (cloned.material) {
+        cloned.material = cloned.material.clone();
+      }
+    } else {
+      unassignedGroup.add(cloned);
+    }
+  });
+
+  // Compute centroid for each layer
+  customLayers.forEach(cl => {
+    if (cl.meshes.length === 0) return;
+    const b = new THREE.Box3();
+    cl.meshes.forEach(m => b.expandByObject(m));
+    b.getCenter(cl.centroid);
+  });
+
+  // Scale & center all meshes, store original positions
+  // Find global centroid of assigned meshes
+  const allAssigned = [];
+  customLayers.forEach(cl => cl.meshes.forEach(m => allAssigned.push(m)));
+  const globalBox = new THREE.Box3();
+  allAssigned.forEach(m => globalBox.expandByObject(m));
+  const globalCenter = new THREE.Vector3();
+  globalBox.getCenter(globalCenter);
+
+  // Transform meshes: scale, then center at origin (Y=0 at bottom)
+  const targetBottomY = WALL_HEIGHT;
+  allAssigned.forEach(m => {
+    m.geometry = m.geometry.clone();
+    // Apply scale
+    m.geometry.scale(scale, scale, scale);
+    // Offset to center
+    m.position.multiplyScalar(scale);
+    m.position.sub(globalCenter.clone().multiplyScalar(scale));
+    m.position.y += (targetBottomY - globalBox.min.y * scale + globalCenter.y * scale);
+    m.castShadow = true;
+    m.receiveShadow = true;
+    customGroup.add(m);
+  });
+
+  // Store original positions for explode animation
+  customLayers.forEach(cl => {
+    cl.originalPositions.clear();
+    cl.meshes.forEach(m => {
+      cl.originalPositions.set(m, m.position.clone());
+    });
+    // Recompute centroid after transform
+    if (cl.meshes.length > 0) {
+      const b = new THREE.Box3();
+      cl.meshes.forEach(m => b.expandByObject(m));
+      b.getCenter(cl.centroid);
+    }
+  });
+
+  // Compute overall center for explode
+  const allBox = new THREE.Box3();
+  allAssigned.forEach(m => allBox.expandByObject(m));
+  allBox.getCenter(customModelCenter);
+
+  // Build flat mesh array for raycasting
+  allCustomMeshes = [];
+  customMeshIndex = new Map();
+  customLayers.forEach(cl => {
+    cl.meshes.forEach(m => {
+      allCustomMeshes.push(m);
+      customMeshIndex.set(m, cl.layerIndex);
+    });
+  });
+}
+
+function showMappingModal(allObjs) {
+  const tbody = allObjs.map((m, i) => {
+    const name = m.name || '(未命名)';
+    const assignIdx = meshAssignments[name] ?? -1;
+    const opts = ['<option value="-1">未分配</option>']
+      .concat(layerDefs.map((d, idx) =>
+        `<option value="${idx}"${idx === assignIdx ? ' selected' : ''}>${d.name} (${d.eng})</option>`
+      )).join('');
+    const meshInfo = m.isMesh ? `${m.geometry?.type || 'Mesh'} · ${approxTriCount(m)}` : '';
+    return `<tr>
+      <td><strong>${escapeHtml(name)}</strong><br><span style="font-size:0.68rem;color:var(--text-secondary);">${meshInfo}</span></td>
+      <td><select data-mesh="${escapeHtml(name)}">${opts}</select></td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('mappingTable').innerHTML = `
+    <table><thead><tr><th>模型中的网格名称</th><th>映射到构造层</th></tr></thead>
+    <tbody>${tbody}</tbody></table>`;
+
+  // Count unassigned
+  const unassignedCount = Object.values(meshAssignments).filter(v => v < 0).length;
+  document.getElementById('unassignedNote').textContent =
+    unassignedCount > 0
+      ? `⚠️ ${unassignedCount} 个网格未分配，它们将在模型中显示但不参与层次交互。`
+      : '✅ 所有网格已分配到对应构造层。';
+
+  document.getElementById('mappingModal').classList.add('open');
+
+  // Update meshAssignments on select change
+  document.querySelectorAll('#mappingTable select').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const meshName = sel.dataset.mesh;
+      meshAssignments[meshName] = parseInt(sel.value);
+      const ua = Object.values(meshAssignments).filter(v => v < 0).length;
+      document.getElementById('unassignedNote').textContent =
+        ua > 0 ? `⚠️ ${ua} 个网格未分配` : '✅ 所有网格已分配';
+    });
+  });
+}
+
+function approxTriCount(mesh) {
+  try {
+    const geo = mesh.geometry;
+    if (!geo) return '';
+    const idx = geo.index;
+    if (idx) return `${Math.round(idx.count / 3)} △`;
+    const pos = geo.attributes.position;
+    if (pos) return `${Math.round(pos.count / 3)} △`;
+  } catch (e) {}
+  return '';
+}
+
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function applyMapping() {
+  document.getElementById('mappingModal').classList.remove('open');
+  switchToCustomModel();
+}
+
+function switchToCustomModel() {
+  usingCustomModel = true;
+  demoGroup.visible = false;
+  buildingGroup.visible = false;
+  customGroup.visible = true;
+
+  document.getElementById('btnRestoreDemo').style.display = '';
+  document.getElementById('btnLoadModel').style.display = 'none';
+  document.getElementById('modelIndicator').innerHTML = '<span class="dot custom"></span> 自定义模型';
+  document.getElementById('legendSubtitle').textContent =
+    `自定义模型 · ${layerDefs.length} 层构造`;
+
+  selectedIdx = -1;
+  hoveredIdx = -1;
+  targetExplode = 0;
+  explodeFactor = 0;
+  document.getElementById('btnExplode').classList.remove('active');
+
+  buildLegend();
+  updateDetailPanel();
+  resetEmissives();
+  updateAllPositions();
+
+  // Adjust camera
+  const dist = customModelSize * 1.5;
+  camera.position.set(dist * 0.7, dist * 0.5, dist * 0.7);
+  controls.target.copy(customModelCenter);
+  controls.update();
+}
+
+function restoreDemoModel() {
+  usingCustomModel = false;
+  demoGroup.visible = true;
+  buildingGroup.visible = true;
+  customGroup.visible = false;
+
+  // Clear custom data
+  while (customGroup.children.length > 0) customGroup.remove(customGroup.children[0]);
+  customLayers = null;
+  customMeshIndex = null;
+  allCustomMeshes = [];
+  meshAssignments = {};
+  allMeshNames = [];
+
+  document.getElementById('btnRestoreDemo').style.display = 'none';
+  document.getElementById('btnLoadModel').style.display = '';
+  document.getElementById('modelIndicator').innerHTML = '<span class="dot demo"></span> Demo 模型';
+  document.getElementById('legendSubtitle').textContent = '由上至下 · 共 8 层构造';
+
+  selectedIdx = -1;
+  hoveredIdx = -1;
+  targetExplode = 0;
+  explodeFactor = 0;
+  document.getElementById('btnExplode').classList.remove('active');
+
+  buildLegend();
+  updateDetailPanel();
+  resetEmissives();
+  updateAllPositions();
+
+  camera.position.copy(defaultCamPos);
+  controls.target.copy(defaultTarget);
+  controls.update();
+}
+
+function loadModelFile(file) {
+  document.getElementById('loading').classList.remove('hidden');
+  const url = URL.createObjectURL(file);
+  gltfLoader.load(url, (gltf) => {
+    URL.revokeObjectURL(url);
+    document.getElementById('loading').classList.add('hidden');
+    processCustomModel(gltf.scene);
+  }, undefined, (err) => {
+    URL.revokeObjectURL(url);
+    document.getElementById('loading').classList.add('hidden');
+    console.error('GLTF load error:', err);
+    alert('模型加载失败: ' + (err.message || '未知错误'));
+  });
+}
+
+// ═══════════════════════════════════════════
+// EVENT HANDLERS
+// ═══════════════════════════════════════════
+
+// Drag & drop
+let dragCounter = 0;
+viewport.addEventListener('dragenter', (e) => {
+  e.preventDefault();
+  dragCounter++;
+  if (dragCounter === 1) document.getElementById('dropOverlay').classList.add('active');
+});
+viewport.addEventListener('dragleave', () => {
+  dragCounter--;
+  if (dragCounter <= 0) {
+    dragCounter = 0;
+    document.getElementById('dropOverlay').classList.remove('active');
+  }
+});
+viewport.addEventListener('dragover', (e) => { e.preventDefault(); });
+viewport.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dragCounter = 0;
+  document.getElementById('dropOverlay').classList.remove('active');
+  const file = e.dataTransfer.files[0];
+  if (file && /\.(glb|gltf)$/i.test(file.name)) {
+    loadModelFile(file);
+  } else {
+    alert('请拖入 .glb 或 .gltf 格式的 3D 模型文件。');
+  }
+});
+
+// File input
+document.getElementById('btnLoadModel').addEventListener('click', () => {
+  document.getElementById('fileInput').click();
+});
+document.getElementById('fileInput').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (file) loadModelFile(file);
+  e.target.value = '';
+});
+
+// Restore demo
+document.getElementById('btnRestoreDemo').addEventListener('click', restoreDemoModel);
+
+// Mapping modal
+document.getElementById('btnMappingApply').addEventListener('click', applyMapping);
+document.getElementById('btnMappingCancel').addEventListener('click', () => {
+  document.getElementById('mappingModal').classList.remove('open');
+  document.getElementById('loading').classList.add('hidden');
+});
+
+// Raycaster hover
+renderer.domElement.addEventListener('mousemove', (e) => {
+  const idx = getLayerFromIntersect(getIntersections(e));
+  if (idx !== hoveredIdx) {
+    hoveredIdx = idx;
+    resetEmissives();
+    renderer.domElement.style.cursor = idx >= 0 ? 'pointer' : '';
+  }
+});
+
+renderer.domElement.addEventListener('click', (e) => {
+  const idx = getLayerFromIntersect(getIntersections(e));
+  selectLayer(idx);
+});
+
+// Buttons
+document.getElementById('btnExplode').addEventListener('click', () => {
+  targetExplode = targetExplode > 0.5 ? 0 : 1;
+  document.getElementById('btnExplode').classList.toggle('active', targetExplode > 0.5);
+});
+
+document.getElementById('btnAutoRotate').addEventListener('click', () => {
+  autoRotate = !autoRotate;
+  controls.autoRotate = autoRotate;
+  document.getElementById('btnAutoRotate').classList.toggle('active', autoRotate);
+});
+
+document.getElementById('btnReset').addEventListener('click', () => {
+  resetting = true;
+  resetT = 0;
+  resetFromPos.copy(camera.position);
+  resetFromTarget.copy(controls.target);
+});
+
+// Keyboard
+window.addEventListener('keydown', (e) => {
+  if (document.getElementById('mappingModal').classList.contains('open')) return;
+  switch (e.key.toLowerCase()) {
+    case 'e': targetExplode = targetExplode > 0.5 ? 0 : 1;
+              document.getElementById('btnExplode').classList.toggle('active', targetExplode > 0.5);
+              break;
+    case 'r': autoRotate = !autoRotate; controls.autoRotate = autoRotate;
+              document.getElementById('btnAutoRotate').classList.toggle('active', autoRotate);
+              break;
+    case '0': selectLayer(-1); break;
+    case '1': case '2': case '3': case '4':
+    case '5': case '6': case '7': case '8':
+      selectLayer(parseInt(e.key) - 1); break;
+    case 'o':
+      document.getElementById('fileInput').click();
+      break;
+  }
+});
+
+// ═══════════════════════════════════════════
+// RESIZE
+// ═══════════════════════════════════════════
+function resize() {
+  const rect = viewport.getBoundingClientRect();
+  renderer.setSize(rect.width, rect.height);
+  camera.aspect = rect.width / Math.max(rect.height, 1);
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+resize();
+
+// Hide loading
+setTimeout(() => {
+  document.getElementById('loading').classList.add('hidden');
+}, 400);
+
+// ═══════════════════════════════════════════
+// ANIMATION LOOP
+// ═══════════════════════════════════════════
+const clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.1);
+
+  // Smooth explode
+  const lerpSpeed = 6;
+  explodeFactor += (targetExplode - explodeFactor) * Math.min(lerpSpeed * dt, 1);
+  if (Math.abs(targetExplode - explodeFactor) < 0.001) explodeFactor = targetExplode;
+  updateAllPositions();
+
+  // Pulsing emissive on selected layer
+  if (selectedIdx >= 0) {
+    const pulse = Math.sin(Date.now() * 0.004) * 0.15 + 0.38;
+    const mats = getLayerMaterials(selectedIdx);
+    mats.forEach(m => {
+      if (m && m.emissive) {
+        m.emissive.set('#b55a10');
+        m.emissiveIntensity = pulse;
+      }
+    });
+  }
+
+  // Reset camera animation
+  if (resetting) {
+    resetT += dt * 2.2;
+    if (resetT >= 1) {
+      resetT = 1; resetting = false;
+      camera.position.copy(defaultCamPos);
+      controls.target.copy(defaultTarget);
+    } else {
+      const t = easeInOutCubic(resetT);
+      camera.position.lerpVectors(resetFromPos, defaultCamPos, t);
+      controls.target.lerpVectors(resetFromTarget, defaultTarget, t);
+    }
+  }
+
+  controls.update();
+  renderer.render(scene, camera);
+
+  const hint = document.getElementById('hint');
+  if (hint) {
+    hint.style.opacity = explodeFactor < 0.1 ? 0.85 : Math.max(0, 0.85 - explodeFactor * 2);
+  }
+}
+
+function easeInOutCubic(t) {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+animate();
+updateDemoLayerPositions();
+
+console.log('🏠 屋顶构造交互式教学 Demo 已就绪');
+console.log('  Demo 模型: 拖拽旋转 | 滚轮缩放 | 按键 E 爆炸图');
+console.log('  自定义模型: 拖拽 .glb/.gltf 文件到窗口 | 按键 O 打开文件选择');
+</script>
+</body>
+</html>
