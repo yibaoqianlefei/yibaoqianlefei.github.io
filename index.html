@@ -472,6 +472,7 @@ let customModelSize = 1;
 // Mesh→layer mapping (editable in modal)
 let meshAssignments = {};       // meshName → layerIndex (or -1 for unassigned)
 let allMeshNames = [];          // all mesh names found in loaded model
+let loadedGltfScene = null;     // stored GLTF scene for building custom layers
 
 // ═══════════════════════════════════════════
 // STATE
@@ -709,9 +710,12 @@ function collectMeshObjects(root) {
 }
 
 /** Process a loaded GLTF scene into custom layers */
-function processCustomModel(scene) {
+function processCustomModel(gltfScene) {
+  // Store scene for later building
+  loadedGltfScene = gltfScene;
+
   // Collect meshes
-  const allObjs = collectMeshObjects(scene);
+  const allObjs = collectMeshObjects(gltfScene);
   allMeshNames = allObjs.map(m => m.name || '(未命名)');
 
   // Auto-match
@@ -731,7 +735,14 @@ function buildCustomLayers(scene) {
     customGroup.remove(customGroup.children[0]);
   }
 
-  const allObjs = collectMeshObjects(scene);
+  // Collect meshes with valid geometry
+  const allObjs = collectMeshObjects(scene).filter(m => m.geometry);
+
+  if (allObjs.length === 0) {
+    console.error('No meshes with geometry found in the loaded model');
+    alert('模型中未找到任何网格几何体。请检查导出的 GLB/GLTF 文件是否包含网格。');
+    return;
+  }
 
   // Compute model bounds for scaling & centering
   const box = new THREE.Box3();
@@ -793,6 +804,26 @@ function buildCustomLayers(scene) {
   // Find global centroid of assigned meshes
   const allAssigned = [];
   customLayers.forEach(cl => cl.meshes.forEach(m => allAssigned.push(m)));
+
+  if (allAssigned.length === 0) {
+    console.warn('No meshes were assigned to any layer — assigning all to 结构层');
+    // Fallback: assign all meshes to structural layer (index 0)
+    allObjs.forEach(m => {
+      const cloned = m.clone();
+      cloned.userData.layerIndex = 0;
+      cloned.userData.meshName = m.name || '(未命名)';
+      customLayers[0].meshes.push(cloned);
+      allAssigned.push(cloned);
+    });
+    // Recompute centroids
+    customLayers.forEach(cl => {
+      if (cl.meshes.length === 0) return;
+      const b = new THREE.Box3();
+      cl.meshes.forEach(m => b.expandByObject(m));
+      b.getCenter(cl.centroid);
+    });
+  }
+
   const globalBox = new THREE.Box3();
   allAssigned.forEach(m => globalBox.expandByObject(m));
   const globalCenter = new THREE.Vector3();
@@ -801,6 +832,7 @@ function buildCustomLayers(scene) {
   // Transform meshes: scale, then center at origin (Y=0 at bottom)
   const targetBottomY = WALL_HEIGHT;
   allAssigned.forEach(m => {
+    if (!m.geometry) return;
     m.geometry = m.geometry.clone();
     // Apply scale
     m.geometry.scale(scale, scale, scale);
@@ -903,6 +935,11 @@ function escapeHtml(s) {
 
 function applyMapping() {
   document.getElementById('mappingModal').classList.remove('open');
+  if (!loadedGltfScene) {
+    console.error('No loaded GLTF scene to build from');
+    return;
+  }
+  buildCustomLayers(loadedGltfScene);
   switchToCustomModel();
 }
 
@@ -949,6 +986,7 @@ function restoreDemoModel() {
   allCustomMeshes = [];
   meshAssignments = {};
   allMeshNames = [];
+  loadedGltfScene = null;
 
   document.getElementById('btnRestoreDemo').style.display = 'none';
   document.getElementById('btnLoadModel').style.display = '';
