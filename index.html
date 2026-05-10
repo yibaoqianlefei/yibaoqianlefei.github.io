@@ -186,6 +186,36 @@
   .modal .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
   .modal .btn.primary:hover { background: #a93226; }
 
+  /* Layer edit modal */
+  .edit-layer-row {
+    display: flex; align-items: center; gap: 8px; padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .edit-layer-row .reorder { display: flex; flex-direction: column; gap: 2px; }
+  .edit-layer-row .reorder button {
+    background: none; border: 1px solid var(--border); border-radius: 3px;
+    cursor: pointer; font-size: 0.6rem; padding: 1px 6px; line-height: 1;
+    color: var(--text-secondary);
+  }
+  .edit-layer-row .reorder button:hover { background: #eee; }
+  .edit-layer-row input[type="color"] {
+    width: 32px; height: 32px; border: 2px solid var(--border); border-radius: 6px;
+    cursor: pointer; padding: 0; flex-shrink: 0;
+  }
+  .edit-layer-row input[type="text"], .edit-layer-row input[type="number"] {
+    padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px;
+    font-family: inherit; font-size: 0.78rem; min-width: 0;
+  }
+  .edit-layer-row .name-input { width: 80px; }
+  .edit-layer-row .eng-input { width: 130px; }
+  .edit-layer-row .thick-input { width: 55px; }
+  .edit-layer-row .desc-input { flex: 1; min-width: 120px; }
+  .edit-layer-row .del-btn {
+    background: none; border: none; cursor: pointer; font-size: 1rem;
+    color: #c0392b; opacity: 0.5; padding: 4px;
+  }
+  .edit-layer-row .del-btn:hover { opacity: 1; }
+
   /* Loading */
   .loading {
     position: fixed; inset: 0; background: var(--bg); display: flex;
@@ -236,6 +266,7 @@
     <div class="sidebar-section">
       <h3>📐 屋顶构造层次</h3>
       <p class="subtitle" id="legendSubtitle">由上至下 · 共 8 层构造</p>
+      <button class="vp-btn" id="btnEditLayers" style="width:100%;margin-bottom:12px;font-size:0.8rem;">✏️ 编辑层级</button>
       <div id="legend"></div>
     </div>
     <div class="sidebar-section detail-panel" id="detailPanel">
@@ -258,6 +289,24 @@
     <div class="btn-row">
       <button class="btn" id="btnMappingCancel">取消</button>
       <button class="btn primary" id="btnMappingApply">应用映射</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Layers Modal -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal" style="max-width:700px;">
+    <h3>✏️ 编辑屋顶构造层级</h3>
+    <p class="modal-sub">增删改层级后点击保存，3D 模型会实时重建。修改自动保存在浏览器中。</p>
+    <div id="editLayerList"></div>
+    <button class="btn" id="btnAddLayer" style="margin-top:12px;">＋ 添加层级</button>
+    <p style="font-size:0.72rem;color:var(--text-secondary);margin-top:4px;">
+      提示：修改后自定义模型的匹配关键词也需要同步更新（在代码 MATCH_PATTERNS 中）
+    </p>
+    <div class="btn-row">
+      <button class="btn" id="btnEditReset">🔄 恢复默认</button>
+      <button class="btn" id="btnEditCancel">取消</button>
+      <button class="btn primary" id="btnEditSave">保存并重建</button>
     </div>
   </div>
 </div>
@@ -294,7 +343,7 @@ const WALL_THICK = 0.25;
 const EXPLODE_GAP = 0.55;
 
 // Layer definitions (bottom → top)
-const layerDefs = [
+const defaultLayerDefs = [
   { name: '结构层',   eng: 'Structural Deck',           color: '#95a5a6', thick: 0.25, roughness: 0.55,
     desc: '钢筋混凝土现浇屋面板，承受屋顶全部荷载（自重、雪荷载、风荷载、施工荷载等），并将荷载传递至下部承重墙或柱。通常厚度为 100–150mm。' },
   { name: '隔汽层',   eng: 'Vapor Barrier',             color: '#27ae60', thick: 0.06, roughness: 0.35,
@@ -313,6 +362,9 @@ const layerDefs = [
     desc: '屋顶最外层饰面，兼具防水、保温和装饰功能。常用材料有粘土瓦、水泥瓦、金属瓦、石板瓦等。通过挂瓦条和顺水条固定在屋面基层上。' },
 ];
 
+// Load from localStorage or use defaults
+let layerDefs = loadLayerConfig() || defaultLayerDefs.map(d => ({...d}));
+
 // Keywords for auto-matching mesh names → layer index (case-insensitive)
 const MATCH_PATTERNS = [
   { idx: 0, kw: ['结构层','structural','structure deck','concrete','deck','slab','结构','struct'] },
@@ -324,6 +376,25 @@ const MATCH_PATTERNS = [
   { idx: 6, kw: ['保护层','protective','protection','保护','cover','covering','board'] },
   { idx: 7, kw: ['屋面瓦','roof tile','tile','瓦','shingle','slate','clay','metal roof','屋面'] },
 ];
+
+// ═══════════════════════════════════════════
+// LOCAL STORAGE PERSISTENCE
+// ═══════════════════════════════════════════
+function loadLayerConfig() {
+  try {
+    const raw = localStorage.getItem('roofLayerConfig');
+    if (raw) return JSON.parse(raw);
+  } catch (e) { /* ignore */ }
+  return null;
+}
+function saveLayerConfig(defs) {
+  try {
+    localStorage.setItem('roofLayerConfig', JSON.stringify(defs.map(d => ({
+      name: d.name, eng: d.eng, color: d.color, thick: d.thick,
+      roughness: d.roughness, desc: d.desc
+    }))));
+  } catch (e) { /* ignore */ }
+}
 
 // ═══════════════════════════════════════════
 // SCENE SETUP
@@ -603,6 +674,8 @@ const legendEl = document.getElementById('legend');
 const detailPanel = document.getElementById('detailPanel');
 
 function buildLegend() {
+  document.getElementById('legendSubtitle').textContent =
+    `由上至下 · 共 ${layerDefs.length} 层构造`;
   const items = [...layerDefs].reverse();
   legendEl.innerHTML = items.map((def, ri) => {
     const i = layerDefs.length - 1 - ri;
@@ -1025,6 +1098,138 @@ function loadModelFile(file) {
 }
 
 // ═══════════════════════════════════════════
+// REBUILD DEMO MODEL FROM layerDefs
+// ═══════════════════════════════════════════
+function rebuildDemoModel() {
+  // Clear old demo meshes
+  while (demoGroup.children.length > 0) demoGroup.remove(demoGroup.children[0]);
+  layers.length = 0;
+  allMeshes.length = 0;
+
+  // Recompute slope geometry
+  const newSlopedLen = HALF_WIDTH / Math.cos(PITCH);
+  let cum = 0;
+  layerDefs.forEach((def, i) => {
+    const baseOff = cum + def.thick / 2;
+    cum += def.thick;
+    const geoBox = new THREE.BoxGeometry(newSlopedLen, def.thick, ROOF_DEPTH);
+
+    const mat = new THREE.MeshStandardMaterial({ color: def.color, roughness: def.roughness, metalness: 0.02 });
+    const leftMesh = new THREE.Mesh(geoBox, mat);
+    leftMesh.rotation.z = PITCH;
+    leftMesh.castShadow = true; leftMesh.receiveShadow = true;
+    leftMesh.userData = { layerIndex: i, side: 'left' };
+    demoGroup.add(leftMesh);
+
+    const matR = new THREE.MeshStandardMaterial({ color: def.color, roughness: def.roughness, metalness: 0.02 });
+    const rightMesh = new THREE.Mesh(geoBox.clone(), matR);
+    rightMesh.rotation.z = -PITCH;
+    rightMesh.castShadow = true; rightMesh.receiveShadow = true;
+    rightMesh.userData = { layerIndex: i, side: 'right' };
+    demoGroup.add(rightMesh);
+
+    layers.push({ def, leftMesh, rightMesh, leftMat: mat, rightMat: matR, baseOffset: baseOff });
+    allMeshes.push(leftMesh, rightMesh);
+  });
+
+  selectedIdx = -1; hoveredIdx = -1;
+  updateDemoLayerPositions();
+  resetEmissives();
+  buildLegend();
+  updateDetailPanel();
+  document.getElementById('legendSubtitle').textContent =
+    `由上至下 · 共 ${layerDefs.length} 层构造`;
+}
+
+// ═══════════════════════════════════════════
+// LAYER EDIT MODAL
+// ═══════════════════════════════════════════
+function openEditModal() {
+  if (usingCustomModel) {
+    alert('请先还原到 Demo 模型再编辑层级。');
+    return;
+  }
+  const list = document.getElementById('editLayerList');
+  document.getElementById('editModal').classList.add('open');
+  renderEditRows();
+}
+
+function renderEditRows() {
+  const list = document.getElementById('editLayerList');
+  list.innerHTML = layerDefs.map((def, i) => `
+    <div class="edit-layer-row" data-idx="${i}">
+      <div class="reorder">
+        <button class="mv-up" data-idx="${i}" ${i === 0 ? 'disabled' : ''}>▲</button>
+        <button class="mv-down" data-idx="${i}" ${i === layerDefs.length - 1 ? 'disabled' : ''}>▼</button>
+      </div>
+      <input type="color" value="${def.color}" data-idx="${i}" data-field="color">
+      <input type="text" class="name-input" value="${escapeHtml(def.name)}" data-idx="${i}" data-field="name" placeholder="中文名">
+      <input type="text" class="eng-input" value="${escapeHtml(def.eng)}" data-idx="${i}" data-field="eng" placeholder="英文名">
+      <input type="number" class="thick-input" value="${def.thick}" data-idx="${i}" data-field="thick" step="0.01" min="0.02" max="1">
+      <input type="text" class="desc-input" value="${escapeHtml(def.desc)}" data-idx="${i}" data-field="desc" placeholder="描述">
+      <button class="del-btn" data-idx="${i}" title="删除">🗑</button>
+    </div>
+  `).join('');
+
+  // Bind events
+  list.querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('change', () => {
+      const i = parseInt(inp.dataset.idx);
+      const field = inp.dataset.field;
+      const val = field === 'thick' ? parseFloat(inp.value) || 0.06 : inp.value;
+      layerDefs[i][field] = val;
+      saveLayerConfig(layerDefs);
+    });
+  });
+  list.querySelectorAll('.mv-up').forEach(btn => {
+    btn.addEventListener('click', () => moveLayer(parseInt(btn.dataset.idx), -1));
+  });
+  list.querySelectorAll('.mv-down').forEach(btn => {
+    btn.addEventListener('click', () => moveLayer(parseInt(btn.dataset.idx), 1));
+  });
+  list.querySelectorAll('.del-btn').forEach(btn => {
+    btn.addEventListener('click', () => removeLayer(parseInt(btn.dataset.idx)));
+  });
+}
+
+function moveLayer(idx, dir) {
+  const newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= layerDefs.length) return;
+  [layerDefs[idx], layerDefs[newIdx]] = [layerDefs[newIdx], layerDefs[idx]];
+  saveLayerConfig(layerDefs);
+  renderEditRows();
+}
+
+function removeLayer(idx) {
+  if (layerDefs.length <= 2) { alert('至少保留 2 个层级。'); return; }
+  layerDefs.splice(idx, 1);
+  saveLayerConfig(layerDefs);
+  renderEditRows();
+}
+
+function addLayer() {
+  layerDefs.push({
+    name: '新层级', eng: 'New Layer', color: '#888888', thick: 0.1, roughness: 0.5,
+    desc: '请填写描述'
+  });
+  saveLayerConfig(layerDefs);
+  renderEditRows();
+}
+
+function saveEdits() {
+  document.getElementById('editModal').classList.remove('open');
+  saveLayerConfig(layerDefs);
+  rebuildDemoModel();
+}
+
+function resetToDefault() {
+  if (!confirm('确定恢复为默认的 8 层构造吗？你当前的修改会丢失。')) return;
+  layerDefs = defaultLayerDefs.map(d => ({...d}));
+  localStorage.removeItem('roofLayerConfig');
+  renderEditRows();
+}
+
+// ═══════════════════════════════════════════
 // EVENT HANDLERS
 // ═══════════════════════════════════════════
 
@@ -1075,6 +1280,15 @@ document.getElementById('btnMappingCancel').addEventListener('click', () => {
   document.getElementById('loading').classList.add('hidden');
 });
 
+// Edit layer modal
+document.getElementById('btnEditLayers').addEventListener('click', openEditModal);
+document.getElementById('btnEditSave').addEventListener('click', saveEdits);
+document.getElementById('btnEditCancel').addEventListener('click', () => {
+  document.getElementById('editModal').classList.remove('open');
+});
+document.getElementById('btnEditReset').addEventListener('click', resetToDefault);
+document.getElementById('btnAddLayer').addEventListener('click', addLayer);
+
 // Raycaster hover
 renderer.domElement.addEventListener('mousemove', (e) => {
   const idx = getLayerFromIntersect(getIntersections(e));
@@ -1120,11 +1334,15 @@ window.addEventListener('keydown', (e) => {
               document.getElementById('btnAutoRotate').classList.toggle('active', autoRotate);
               break;
     case '0': selectLayer(-1); break;
-    case '1': case '2': case '3': case '4':
-    case '5': case '6': case '7': case '8':
-      selectLayer(parseInt(e.key) - 1); break;
     case 'o':
       document.getElementById('fileInput').click();
+      break;
+    default:
+      if (/^[1-9]$/.test(e.key)) {
+        const idx = parseInt(e.key) - 1;
+        if (idx < layerDefs.length) selectLayer(idx);
+      }
+      break;
       break;
   }
 });
