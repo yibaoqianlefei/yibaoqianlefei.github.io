@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>建筑构造 · 交互式教学平台</title>
+<style>
+  :root {
+    --bg:       #fafaf9;
+    --surface:  #ffffff;
+    --text:     #1a1a1a;
+    --muted:    #6b6b6b;
+    --subtle:   #aaaaaa;
+    --border:   #e8e8e6;
+    --heading:  "Noto Serif SC", "Source Han Serif SC", "SimSun", "Songti SC", Georgia, serif;
+    --body:     "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+    --mono:     "SF Mono", "Cascadia Code", "Consolas", monospace;
+    --warn:     #f5f0e8;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    font-family: var(--body);
+    background: var(--bg); color: var(--text);
+    min-height: 100vh; line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Top bar ── */
+  .topbar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+    padding: 14px 32px;
+    background: rgba(250,250,249,0.92);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: baseline; gap: 24px;
+  }
+  .topbar .logo {
+    font-family: var(--heading);
+    font-size: 0.95rem; font-weight: 500; letter-spacing: 0.04em;
+  }
+  .topbar nav {
+    display: flex; gap: 20px;
+    font-size: 0.72rem; color: var(--muted); letter-spacing: 0.03em;
+  }
+  .topbar nav a {
+    text-decoration: none; color: inherit;
+    transition: color 0.15s;
+  }
+  .topbar nav a:hover { color: var(--text); }
+
+  /* ── Hero ── */
+  .hero {
+    padding: 120px 48px 64px;
+    max-width: 760px; margin: 0 auto; text-align: center;
+  }
+  .hero h1 {
+    font-family: var(--heading);
+    font-size: 2.2rem; font-weight: 500; letter-spacing: 0.06em;
+    line-height: 1.3;
+  }
+  .hero .subtitle {
+    font-size: 0.85rem; color: var(--muted); margin-top: 16px;
+    letter-spacing: 0.03em; line-height: 1.7;
+    max-width: 480px; margin-left: auto; margin-right: auto;
+  }
+  .hero .stat-row {
+    display: flex; gap: 40px; justify-content: center; margin-top: 36px;
+  }
+  .hero .stat {
+    text-align: center;
+  }
+  .hero .stat .num {
+    font-family: var(--heading);
+    font-size: 1.8rem; font-weight: 500;
+  }
+  .hero .stat .label {
+    font-family: var(--mono);
+    font-size: 0.62rem; color: var(--subtle);
+    letter-spacing: 0.05em; margin-top: 4px;
+  }
+
+  /* ── Section ── */
+  .section {
+    max-width: 860px; margin: 0 auto; padding: 48px 48px;
+    border-top: 1px solid var(--border);
+  }
+  .section-header {
+    margin-bottom: 32px;
+  }
+  .section-header h2 {
+    font-family: var(--heading);
+    font-size: 1.15rem; font-weight: 500; letter-spacing: 0.04em;
+  }
+  .section-header p {
+    font-size: 0.75rem; color: var(--muted); margin-top: 4px;
+  }
+
+  /* ── Course grid ── */
+  .course-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 1px;
+  }
+  .course-card {
+    background: var(--surface);
+    padding: 28px 24px;
+    text-decoration: none; color: inherit;
+    transition: background 0.18s;
+    border: 1px solid var(--border);
+    margin: -0.5px;
+    position: relative;
+  }
+  .course-card:hover { background: #f6f6f4; }
+  .course-card .index {
+    font-family: var(--mono);
+    font-size: 0.62rem; color: var(--subtle);
+    letter-spacing: 0.06em; margin-bottom: 12px;
+  }
+  .course-card .title {
+    font-family: var(--heading);
+    font-size: 1rem; font-weight: 500; letter-spacing: 0.03em;
+    margin-bottom: 6px;
+  }
+  .course-card .desc {
+    font-size: 0.72rem; color: var(--muted); line-height: 1.6;
+    margin-bottom: 14px;
+  }
+  .course-card .badge {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 0.58rem; letter-spacing: 0.05em;
+    padding: 2px 8px; border: 1px solid var(--border);
+  }
+  .course-card .badge.ready { color: var(--text); border-color: #aaa; }
+  .course-card.soon {
+    opacity: 0.5; cursor: default;
+  }
+  .course-card.soon:hover { background: var(--surface); }
+  .course-card.soon::after {
+    content: '';
+    position: absolute; top: 12px; right: 14px;
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--subtle);
+  }
+
+  /* ── Features ── */
+  .feature-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 16px 24px;
+  }
+  .feature-item {
+    padding: 20px 0;
+  }
+  .feature-item .f-icon {
+    font-family: var(--mono);
+    font-size: 0.6rem; color: var(--subtle);
+    letter-spacing: 0.05em; margin-bottom: 8px;
+  }
+  .feature-item h4 {
+    font-family: var(--heading);
+    font-size: 0.85rem; font-weight: 500; margin-bottom: 4px;
+  }
+  .feature-item p {
+    font-size: 0.7rem; color: var(--muted); line-height: 1.6;
+  }
+
+  /* ── Footer ── */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 40px 48px;
+    max-width: 860px; margin: 0 auto;
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 24px;
+    font-size: 0.68rem; color: var(--subtle);
+  }
+  footer .col { min-width: 120px; }
+  footer .col h5 {
+    font-family: var(--mono);
+    font-size: 0.6rem; font-weight: 500; letter-spacing: 0.06em;
+    color: var(--muted); margin-bottom: 10px;
+  }
+  footer .col p, footer .col a {
+    display: block; line-height: 2; text-decoration: none; color: inherit;
+  }
+  footer .col a:hover { color: var(--text); }
+  footer .bottom {
+    width: 100%; margin-top: 16px; padding-top: 16px;
+    border-top: 1px solid var(--border);
+    font-family: var(--mono); font-size: 0.6rem; letter-spacing: 0.04em;
+  }
+
+  @media (max-width: 600px) {
+    .hero { padding: 100px 24px 48px; }
+    .hero h1 { font-size: 1.5rem; }
+    .hero .stat-row { gap: 20px; }
+    .section { padding: 32px 24px; }
+    .course-grid { grid-template-columns: 1fr; }
+    footer { padding: 32px 24px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="logo">ArchCon</span>
+  <nav>
+    <a href="#">课程</a>
+    <a href="#about">关于</a>
+    <a href="roof/index.html">在线演示 →</a>
+  </nav>
+</div>
+
+<section class="hero">
+  <h1>建筑构造<br>交互式教学平台</h1>
+  <p class="subtitle">
+    将建筑构造知识转化为可交互的三维模型。旋转、剖切、推出、展开——理解构造层次不再靠想象。
+  </p>
+  <div class="stat-row">
+    <div class="stat"><div class="num">8</div><div class="label">构造层次</div></div>
+    <div class="stat"><div class="num">3D</div><div class="label">交互模式</div></div>
+    <div class="stat"><div class="num">∞</div><div class="label">视角自由</div></div>
+  </div>
+</section>
+
+<div class="section" id="courses">
+  <div class="section-header">
+    <h2>课程目录</h2>
+    <p>点击卡片进入交互式学习模块</p>
+  </div>
+  <div class="course-grid">
+
+    <a class="course-card" href="roof/index.html">
+      <div class="index">Module 01 · 已上线</div>
+      <div class="title">屋顶构造</div>
+      <div class="desc">结构层 → 隔汽层 → 保温层 → 找坡层 → 找平层 → 防水层 → 保护层 → 屋面瓦。八层构造，可旋转、爆炸展开、点击推出。</div>
+      <span class="badge ready">进入学习</span>
+    </a>
+
+    <div class="course-card soon">
+      <div class="index">Module 02 · 开发中</div>
+      <div class="title">墙体构造</div>
+      <div class="desc">外墙外保温系统、内保温系统、幕墙干挂节点、砌体墙身防潮构造。</div>
+      <span class="badge">即将推出</span>
+    </div>
+
+    <div class="course-card soon">
+      <div class="index">Module 03 · 规划中</div>
+      <div class="title">基础与地下室</div>
+      <div class="desc">筏板基础、独立基础、桩基础。地下室防水、排水、防潮构造层次。</div>
+      <span class="badge">即将推出</span>
+    </div>
+
+    <div class="course-card soon">
+      <div class="index">Module 04 · 规划中</div>
+      <div class="title">楼梯与楼板</div>
+      <div class="desc">板式楼梯、梁式楼梯、钢楼梯节点。楼板面层、隔声、防火构造。</div>
+      <span class="badge">即将推出</span>
+    </div>
+
+    <div class="course-card soon">
+      <div class="index">Module 05 · 规划中</div>
+      <div class="title">门窗与幕墙</div>
+      <div class="desc">铝合金窗框节点、玻璃幕墙立柱横梁系统、门窗防水与气密构造。</div>
+      <span class="badge">即将推出</span>
+    </div>
+
+    <div class="course-card soon">
+      <div class="index">Module 06 · 规划中</div>
+      <div class="title">变形缝与防水</div>
+      <div class="desc">屋面变形缝、外墙伸缩缝、地下室沉降缝的盖缝与止水构造。</div>
+      <span class="badge">即将推出</span>
+    </div>
+
+  </div>
+</div>
+
+<div class="section" id="about">
+  <div class="section-header">
+    <h2>平台特色</h2>
+    <p>不只是看——而是动手操作</p>
+  </div>
+  <div class="feature-list">
+
+    <div class="feature-item">
+      <div class="f-icon">01 / 自由视角</div>
+      <h4>三维旋转与缩放</h4>
+      <p>拖拽旋转模型，从任意角度观察构造层之间的关系。缩放拉近查看细部节点。</p>
+    </div>
+
+    <div class="feature-item">
+      <div class="f-icon">02 / 爆炸展开</div>
+      <h4>层次分离视图</h4>
+      <p>一键将各构造层沿法线方向展开，清晰展示每一层的空间位置和厚度关系。</p>
+    </div>
+
+    <div class="feature-item">
+      <div class="f-icon">03 / 构件推出</div>
+      <h4>点击即分离</h4>
+      <p>点击任意构造层，该构件自动向外推出，其余层半透明，聚焦学习单个层次。</p>
+    </div>
+
+    <div class="feature-item">
+      <div class="f-icon">04 / 知识联动</div>
+      <h4>模型与文字同步</h4>
+      <p>选中构件后右侧面板显示该层的名称、英文术语、材料做法和厚度范围。</p>
+    </div>
+
+    <div class="feature-item">
+      <div class="f-icon">05 / 自定义加载</div>
+      <h4>支持自有模型</h4>
+      <p>拖入 GLB/GLTF 格式的三维模型，系统自动匹配构造层或手动配置映射。</p>
+    </div>
+
+    <div class="feature-item">
+      <div class="f-icon">06 / 层级编辑</div>
+      <h4>在线修改构造</h4>
+      <p>无需修改代码，直接在界面中增删改构造层级，修改即时保存到本地。</p>
+    </div>
+
+  </div>
+</div>
+
+<footer>
+  <div class="col">
+    <h5>课程</h5>
+    <a href="roof/index.html">屋顶构造</a>
+    <p>墙体构造</p>
+    <p>基础与地下室</p>
+  </div>
+  <div class="col">
+    <h5>关于</h5>
+    <p>建筑构造教学平台</p>
+    <p>基于 Three.js 构建</p>
+    <p>开源 · MIT License</p>
+  </div>
+  <div class="col">
+    <h5>联系</h5>
+    <p>GitHub: yibaoqianlefei</p>
+    <p>问题反馈与建议</p>
+  </div>
+  <div class="bottom">
+    Architecture Construction · Interactive Teaching Platform · 2026
+  </div>
+</footer>
+
+</body>
+</html>
