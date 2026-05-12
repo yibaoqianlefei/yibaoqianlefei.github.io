@@ -107,12 +107,18 @@
     background: var(--surface);
     padding: 28px 24px;
     text-decoration: none; color: inherit;
-    transition: background 0.18s;
+    transition: all 0.25s cubic-bezier(0.2, 0, 0, 1);
     border: 1px solid var(--border);
     margin: -0.5px;
-    position: relative;
+    position: relative; z-index: 1;
   }
-  .course-card:hover { background: #f6f6f4; }
+  .course-card:hover {
+    background: #fdfdfc;
+    transform: translateY(-4px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.06), 0 2px 6px rgba(0,0,0,0.04);
+    z-index: 2;
+    border-color: #d5d5d0;
+  }
   .course-card .index {
     font-family: var(--mono);
     font-size: 0.62rem; color: var(--subtle);
@@ -208,7 +214,7 @@
   <nav>
     <a href="#">课程</a>
     <a href="#about">关于</a>
-    <a href="viewer.html?m=roof">在线演示 →</a>
+    <a href="roof/index.html">在线演示 →</a>
   </nav>
 </div>
 
@@ -218,7 +224,7 @@
     将建筑构造知识转化为可交互的三维模型。旋转、剖切、推出、展开——理解构造层次不再靠想象。
   </p>
   <div class="stat-row">
-    <div class="stat"><div class="num">8</div><div class="label">构造层次</div></div>
+    <div class="stat"><div class="num" id="moduleCount">-</div><div class="label">课程模块</div></div>
     <div class="stat"><div class="num">3D</div><div class="label">交互模式</div></div>
     <div class="stat"><div class="num">∞</div><div class="label">视角自由</div></div>
   </div>
@@ -229,50 +235,8 @@
     <h2>课程目录</h2>
     <p>点击卡片进入交互式学习模块</p>
   </div>
-  <div class="course-grid">
-
-    <a class="course-card" href="viewer.html?m=roof">
-      <div class="index">Module 01 · 已上线</div>
-      <div class="title">屋顶构造</div>
-      <div class="desc">结构层 → 隔汽层 → 保温层 → 找坡层 → 找平层 → 防水层 → 保护层 → 屋面瓦。八层构造，可旋转、爆炸展开、点击推出。</div>
-      <span class="badge ready">进入学习</span>
-    </a>
-
-    <div class="course-card soon">
-      <div class="index">Module 02 · 开发中</div>
-      <div class="title">墙体构造</div>
-      <div class="desc">外墙外保温系统、内保温系统、幕墙干挂节点、砌体墙身防潮构造。</div>
-      <span class="badge">即将推出</span>
-    </div>
-
-    <div class="course-card soon">
-      <div class="index">Module 03 · 规划中</div>
-      <div class="title">基础与地下室</div>
-      <div class="desc">筏板基础、独立基础、桩基础。地下室防水、排水、防潮构造层次。</div>
-      <span class="badge">即将推出</span>
-    </div>
-
-    <div class="course-card soon">
-      <div class="index">Module 04 · 规划中</div>
-      <div class="title">楼梯与楼板</div>
-      <div class="desc">板式楼梯、梁式楼梯、钢楼梯节点。楼板面层、隔声、防火构造。</div>
-      <span class="badge">即将推出</span>
-    </div>
-
-    <div class="course-card soon">
-      <div class="index">Module 05 · 规划中</div>
-      <div class="title">门窗与幕墙</div>
-      <div class="desc">铝合金窗框节点、玻璃幕墙立柱横梁系统、门窗防水与气密构造。</div>
-      <span class="badge">即将推出</span>
-    </div>
-
-    <div class="course-card soon">
-      <div class="index">Module 06 · 规划中</div>
-      <div class="title">变形缝与防水</div>
-      <div class="desc">屋面变形缝、外墙伸缩缝、地下室沉降缝的盖缝与止水构造。</div>
-      <span class="badge">即将推出</span>
-    </div>
-
+  <div class="course-grid" id="courseGrid">
+    <div style="grid-column:1/-1;text-align:center;padding:32px;color:var(--subtle);font-size:0.75rem;">加载课程列表...</div>
   </div>
 </div>
 
@@ -325,7 +289,7 @@
 <footer>
   <div class="col">
     <h5>课程</h5>
-    <a href="viewer.html?m=roof">屋顶构造</a>
+    <a href="roof/index.html">屋顶构造</a>
     <p>墙体构造</p>
     <p>基础与地下室</p>
   </div>
@@ -344,6 +308,65 @@
     Architecture Construction · Interactive Teaching Platform · 2026
   </div>
 </footer>
+
+<script>
+(async () => {
+  const grid = document.getElementById('courseGrid');
+  const labels = { ready: '已上线', soon: '开发中' };
+  const badgeClass = { ready: 'ready', soon: '' };
+
+  try {
+    const res = await fetch('modules/index.json');
+    const modules = await res.json();
+
+    grid.innerHTML = modules.map((m, i) => {
+      const isReady = m.status === 'ready';
+      const label = labels[m.status] || '规划中';
+      const num = String(i + 1).padStart(2, '0');
+      const url = m.url || (m.id + '/index.html');
+      const card = isReady
+        ? `<a class="course-card" href="${url}">`
+        : '<div class="course-card soon">';
+
+      return card +
+        `<div class="index">Module ${num} · ${label}</div>` +
+        `<div class="title">${m.title}</div>` +
+        `<div class="desc">${m.desc}</div>` +
+        `<span class="badge ${badgeClass[m.status] || ''}">${isReady ? '进入学习' : '即将推出'}</span>` +
+        (isReady ? '</a>' : '</div>');
+    }).join('');
+
+    // Update stats
+    const readyCount = modules.filter(m => m.status === 'ready').length;
+    document.getElementById('moduleCount').textContent = readyCount;
+  } catch (e) {
+    // Fallback for local file:// protocol where fetch is blocked
+    const fallback = [
+      { id:'roof',title:'屋顶构造',desc:'八层构造，可旋转、爆炸展开、点击推出。',status:'ready',url:'roof/index.html' },
+      { id:'wall',title:'墙体构造',desc:'外墙保温系统、幕墙节点、砌体墙身构造。',status:'soon' },
+      { id:'foundation',title:'基础与地下室',desc:'筏板基础、独立基础、地下室防水构造。',status:'soon' },
+      { id:'stairs',title:'楼梯与楼板',desc:'板式楼梯、梁式楼梯、楼板构造层次。',status:'soon' },
+      { id:'facade',title:'门窗与幕墙',desc:'铝合金窗框节点、玻璃幕墙系统。',status:'soon' },
+      { id:'joints',title:'变形缝与防水',desc:'屋面变形缝、伸缩缝、沉降缝构造。',status:'soon' },
+    ];
+    document.getElementById('moduleCount').textContent = fallback.filter(m=>m.status==='ready').length;
+    grid.innerHTML = fallback.map((m,i) => {
+      const isReady = m.status==='ready';
+      const num = String(i+1).padStart(2,'0');
+      const url = m.url || (m.id + '/index.html');
+      const card = isReady
+        ? `<a class="course-card" href="${url}">`
+        : '<div class="course-card soon">';
+      return card +
+        `<div class="index">Module ${num} · ${isReady?'已上线':'即将推出'}</div>` +
+        `<div class="title">${m.title}</div>` +
+        `<div class="desc">${m.desc}</div>` +
+        `<span class="badge ${isReady?'ready':''}">${isReady?'进入学习':'即将推出'}</span>` +
+        (isReady?'</a>':'</div>');
+    }).join('');
+  }
+})();
+</script>
 
 </body>
 </html>
